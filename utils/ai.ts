@@ -1,7 +1,12 @@
 import { OpenAI } from "langchain/llms/openai"
+import { PromptTemplate } from "langchain/prompts"
+import { loadQARefineChain } from "langchain/chains"
 import { StructuredOutputParser } from "langchain/output_parsers"
 import z from "zod"
-import { PromptTemplate } from "langchain/prompts"
+import { Document } from "langchain/document"
+import { create } from "domain"
+import { OpenAIEmbeddings } from "langchain/embeddings/openai"
+import { MemoryVectorStore } from "langchain/vectorstores/memory"
 
 const parser = StructuredOutputParser.fromZodSchema(
     z.object({
@@ -10,7 +15,7 @@ const parser = StructuredOutputParser.fromZodSchema(
         subject: z.string().describe("the subject of the journal entry"),
         negative: z.boolean().describe("is the journal entry negative? (i.e. does it contain negative emotions?"),
         colour: z.string().describe(
-            "a hexidecimal colour code that represents the mood of the entry. Example colour code: #0101fe for blue representing happiness"
+            "Choose a colour that represents the mood of the entry and return the hexidecimal colour code for that colour."
         )
     })
 )
@@ -25,7 +30,7 @@ const getPrompt = async (content) => {
     })
 
     const input = await prompt.format({
-        entry: content
+        entry: content,
     })
 
     console.log(input)
@@ -43,4 +48,31 @@ export const analyse = async (content) => {
     } catch (error) {
         console.log(error)
     }
+}
+
+
+export const qa = async (question, entries) => {
+ const docs = entries.map(
+    (entry) => {
+    return new Document({
+        pageContent: entry.content,
+        metadata: { id: entry.id, createdAt: entry.createdAt },
+    })
+ })
+ 
+ //create model and chain
+ const model = new OpenAI({temperature: 0, modelName: "gpt-3.5-turbo"})
+ const chain = loadQARefineChain(model)
+ const embeddings = new OpenAIEmbeddings()
+ //Load the docs and create vector store
+ const store =  await MemoryVectorStore.fromDocuments(docs, embeddings)
+ console.log(docs, "HELLO")
+ const relevantDocs = await store.similaritySearch(question)
+ //call the chain
+ const res = await chain.call({
+    input_documents: relevantDocs,
+    question,
+ })
+
+ return res.output_text
 }
