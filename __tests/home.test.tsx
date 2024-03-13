@@ -31,5 +31,5 @@ vi.mock('@clerk/nextjs', () => {
   
   test(`Home`, async () => {
     render(await Homepage())
-    expect(screen.getByText('Journal what you love, what you hate,')).toBeTruthy()
+    expect(screen.getByText('Get started')).toBeTruthy()
   })
